@@ -70,6 +70,24 @@ Deposit addresses are public and computable by anyone. An adversary could pre-de
 
 There is no `transferOwnership` function. The only way to change the registered address is to revoke and re-claim with a fresh proof. This ties the registered address to the actual identity owner at claim time, but means wallet rotation requires a new verification round-trip.
 
+### Identifier Renames (Stale Claims)
+
+Off-chain identifiers can change their canonical string — a GitHub repo can be renamed, a package can move to a new scope, a domain can be transferred. When this happens, the old `bytes32` identifier and the new one are completely unrelated hashes. The old identifier still resolves to the original owner; the new identifier resolves to `address(0)`.
+
+**Recommended migration:**
+
+1. **Claim** the new identifier — the owner still controls the entity, so any verifier (oracle or ZK) can produce a valid proof for the new canonical string
+2. **Link** the old identifier as an alias of the new one via `linkIds(newId, [oldId])`
+
+After linking, both identifiers resolve to the same address. Protocols that cached the old identifier continue to work.
+
+**If the owner doesn't act**, the old claim becomes stale. Two future mechanisms can address this:
+
+- **Time-bounded claims**: Verifiers enforce expiring proofs, so stale claims die naturally when the owner can no longer re-verify
+- **Challenge mechanism** (future ERC): A third party submits a counter-proof (oracle-signed or ZK) showing the on-chain registrant no longer controls the off-chain entity
+
+See the [FAQ](/docs/faq) for worked examples.
+
 ---
 
 ## Non-Custodial Properties

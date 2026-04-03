@@ -1,0 +1,103 @@
+---
+title: FAQ
+description: Common questions about identifier lifecycle, renames, stale claims, and verifier compatibility
+---
+
+# FAQ
+
+## What happens if a GitHub repo is renamed?
+
+When a GitHub repository is renamed (e.g. `org/old-name` → `org/new-name`), the two `bytes32` identifiers are completely unrelated hashes. The old identifier still resolves to the original owner. The new identifier resolves to `address(0)` — unclaimed.
+
+**The owner should migrate by claiming and linking:**
+
+1. Call `claim("github", "org/new-name", proof)` — the owner still controls the repo, so any verifier can produce a valid proof for the new canonical string
+2. Call `linkIds(newId, [oldId])` — the owner holds both identifiers on-chain, so linking succeeds
+
+After linking, both the old and new identifiers resolve to the same address. Protocols and agents that cached the old identifier continue to resolve correctly.
+
+```typescript
+// 1. Claim the new name
+await sdk.registry.claim("github.com/org/new-name", proof);
+
+// 2. Compute both ids
+const oldId = sdk.registry.toId("github", "org/old-name");
+const newId = sdk.registry.toId("github", "org/new-name");
+
+// 3. Link old → new (old becomes an alias of new)
+await sdk.registry.linkIds(newId, [oldId]);
+```
+
+This works with both verifier types:
+
+- **Oracle verifiers**: The backend confirms the claimant has admin access to the repo at its current name and signs a proof for the new canonical string.
+- **ZK verifiers** (zkTLS / TLSNotary): The claimant proves control of the repo at its current GitHub API endpoint. The canonical string in the proof matches the new name.
+
+## What if the owner doesn't migrate after a rename?
+
+The old identifier becomes a **stale claim** — it still resolves to the original owner's address, but the off-chain entity no longer matches that canonical string.
+
+Two mechanisms address this:
+
+1. **Time-bounded claims**: Verifiers can require periodic re-verification. When the owner tries to renew, the proof fails because the old canonical string no longer resolves to a valid entity. The claim expires.
+2. **Challenge mechanism** (future ERC): A third party submits a counter-proof — oracle-signed or ZK — showing the on-chain registrant no longer controls the off-chain entity. This would revoke the stale claim.
+
+The current design does not include a challenge mechanism. It is deferred to a future ERC to avoid governance complexity.
+
+## What if someone else creates a new repo with the old name?
+
+This is the hardest case. After `org/old-name` is renamed to `org/new-name`, GitHub may allow a completely new repository called `org/old-name` to be created by someone else.
+
+The new repo's owner cannot claim `org/old-name` on-chain because it is already claimed by the original owner. Without a challenge mechanism, the stale claim blocks them.
+
+Mitigations:
+
+- **Time-bounded claims** solve this passively — the original owner's claim expires, and the new owner claims it fresh.
+- **A challenge mechanism** would solve this actively — the new owner submits a proof that *they* now control `org/old-name` on GitHub, evicting the stale claim. Both oracle and ZK verifiers can produce such proofs.
+
+## Does this apply to other namespaces too?
+
+Yes. The same pattern applies to any namespace where the canonical string can change:
+
+| Namespace | Example change | Same migration flow |
+| --------- | -------------- | ------------------- |
+| `github` | Repo renamed | Claim new name, link old as alias |
+| `npm` | Package moved to new scope | Claim new scope, link old as alias |
+| `dns` | Domain transferred | New owner claims after expiry or challenge |
+
+The key insight: the **registry is identifier-agnostic**. It hashes whatever strings are passed. The verifier is responsible for confirming the claimant controls the entity behind that string. When identifiers change, the claim + link flow is the same regardless of namespace.
+
+## Can a verifier use a stable ID instead of a name?
+
+Yes. For namespaces that have stable numeric identifiers (GitHub repos have an immutable numeric `id`), a verifier could use that as the canonical string — e.g. `("github-id", "12345")`.
+
+This makes the on-chain identifier immune to renames. The human-readable name (`("github", "org/repo")`) can be registered separately and linked as an alias. When the repo is renamed, only the alias needs updating.
+
+Both verifier types can extract stable IDs:
+
+- **Oracle**: Reads the `id` field from the GitHub API response
+- **ZK**: The zkTLS circuit extracts the `id` field from the proven API response
+
+This trades simplicity for robustness — it adds a registration step but eliminates the rename problem entirely.
+
+## Why not just use the stable ID by default?
+
+Readability and discoverability. `github:org/repo` is immediately understandable to humans and agents. `github-id:12345` requires a lookup to know what it refers to. The current design optimises for the common case (identifiers don't change often) and provides the link mechanism for when they do.
+
+## Can I revoke and re-claim instead of linking?
+
+Yes, but linking is preferred. If you revoke `org/old-name` and claim `org/new-name`:
+
+- Protocols that cached the old identifier will resolve to `address(0)` — they lose track of you
+- Any funds held at the old deposit address remain there, claimable by whoever next claims that identifier
+
+With linking, the old identifier continues to resolve to your address, and funds at both deposit addresses remain yours.
+
+## How do protocols know an identifier was renamed?
+
+The registry emits `Claimed` and `Linked` events. A protocol monitoring events would see:
+
+1. `Claimed(newId, "github", "org/new-name", owner)` — new identifier claimed
+2. `Linked(oldId, newId)` — old identifier linked as alias of new
+
+Indexers and agents can use these events to update cached mappings. The SDK's `resolve()` method handles alias resolution transparently — callers don't need to know whether they're looking up a primary or an alias.
