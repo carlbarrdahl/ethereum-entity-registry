@@ -97,6 +97,19 @@ A registrant can voluntarily revoke their claim, returning the identifier to unc
 
 If the identifier has aliases, those must be unlinked before revocation. Any aliases not unlinked become stale (resolve to `address(0)`) and are cleared automatically the next time that alias identifier is claimed.
 
+### Identifier Renames
+
+Off-chain identifiers can change their canonical string — a GitHub repo can be renamed, a package can move to a new scope. When this happens, the old and new `bytes32` hashes are completely unrelated. The old identifier still resolves to the original owner; the new one resolves to `address(0)`.
+
+The recommended migration is claim-and-link:
+
+1. **Claim** the new identifier — the owner still controls the entity, so any verifier (oracle or ZK) can produce a valid proof for the new canonical string.
+2. **Link** the old identifier as an alias of the new one via `linkIds(newId, [oldId])` — the owner holds both on-chain, so linking succeeds.
+
+After linking, both identifiers resolve to the same address. Protocols that cached the old identifier continue to resolve correctly. Both oracle and ZK verifiers support this flow — the verification target is the entity at its current canonical string, not the historical one.
+
+If the owner does not act, the old claim becomes stale. Time-bounded claims mitigate this: the owner cannot renew a proof for a canonical string that no longer resolves to a valid entity. A challenge mechanism — where a third party proves the registrant no longer controls the entity — is an open research question.
+
 ---
 
 ## Registry Contract
@@ -326,6 +339,8 @@ The migration path is: deploy a new `IVerifier` implementation and call `registr
 
 **No registrant transfer.** There is no function to transfer a registered identifier to another address. Changing the registrant requires revoking and re-claiming with a new proof. This ties the registered address to current proven ownership, but means wallet rotation requires a new verification round-trip.
 
+**Identifier renames.** Off-chain identifiers can change their canonical string — a GitHub repository can be renamed, a package can be moved to a new scope. When this happens, the old `bytes32` hash and the new one are unrelated. The old identifier still resolves to the original owner; the new identifier resolves to `address(0)`. The recommended migration is: (1) claim the new identifier (the owner still controls the entity), (2) link the old identifier as an alias of the new one via `linkIds`. After linking, both identifiers resolve correctly. If the owner does not act, the old claim becomes stale. Verifier implementations that enforce time-bounded claims mitigate this — the stale claim expires when the owner can no longer produce a valid renewal proof. See the FAQ in the documentation site for worked examples.
+
 ---
 
 ## Relationship to Existing Projects
@@ -352,7 +367,7 @@ The current implementation settles the core architecture. These questions remain
 
 4. **Namespace governance.** Who can register a new namespace (`npm:`, `crates:`, `pypi:`)? What prevents namespace squatting while keeping the system permissionless for verifier authors?
 
-5. **Identifier permanence and challenges.** GitHub repositories can be transferred, domains can expire, handles can be sold. What is the correct on-chain model for expiring or challenging stale claims without introducing a governance attack surface?
+5. **Identifier permanence and challenges.** GitHub repositories can be renamed or transferred, domains can expire, handles can be sold. What is the correct on-chain model for expiring or challenging stale claims without introducing a governance attack surface? The current mitigation — claim the new identifier and link the old one as an alias — works when the owner acts proactively. For cases where the owner does not act (or a different entity now controls the old identifier), the open questions are: should claims expire automatically, and should third parties be able to challenge stale claims with a counter-proof (oracle-signed or ZK)?
 
 6. **Standardisation path.** What is the right venue and format for standardising the identifier scheme and registry interface — an informational EIP, an ERC, an Ethereum Magicians thread?
 

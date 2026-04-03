@@ -81,6 +81,14 @@ registry.linkIds(primaryId, [aliasId1, aliasId2])
 
 Linked aliases resolve to the primary's registrant transparently through `ownerOf`. Each identifier's escrow remains separate, but all withdraw to the same address.
 
+### Identifier Renames
+
+Off-chain identifiers can change — a GitHub repo can be renamed, a package can move to a new scope. When this happens, the old and new `bytes32` hashes are unrelated: the old identifier still resolves to the original owner; the new one resolves to `address(0)`.
+
+The recommended migration is claim-and-link: (1) claim the new identifier — the owner still controls the entity, so any verifier (oracle or ZK) approves the proof; (2) link the old identifier as an alias of the new one. After linking, both identifiers resolve to the same address and protocols that cached the old identifier continue to work.
+
+If the owner does not act, the old claim becomes stale. Time-bounded claims (where verifiers require periodic re-verification) let stale claims expire naturally. A more active challenge mechanism is an open research question.
+
 ---
 
 ## Why Not Use Existing Projects?

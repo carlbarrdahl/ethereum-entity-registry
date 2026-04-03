@@ -282,9 +282,27 @@ If a verifier and a frontend disagree on the canonical form of a string (e.g. up
 
 ### Stale claims and identifier permanence
 
-Off-chain identifiers are not permanent — GitHub repositories can be transferred, domains can expire, npm packages can be unpublished. This ERC does not define a challenge mechanism for stale claims. Introducing one would add significant complexity and governance attack surface.
+Off-chain identifiers are not permanent — GitHub repositories can be renamed or transferred, domains can expire, npm packages can be unpublished. When an identifier's canonical string changes (e.g. a GitHub repo renamed from `org/old-name` to `org/new-name`), the old `bytes32` hash and the new one are completely unrelated. The old identifier still resolves to the original owner; the new identifier resolves to `address(0)`.
 
-Instead, verifier implementations MAY enforce time-bounded claims (e.g. proofs that expire after a period, requiring periodic re-verification). A challenge or expiry mechanism is deferred to a future ERC. Protocols that cache resolved addresses SHOULD re-validate periodically.
+This ERC does not define a challenge mechanism for stale claims. Introducing one would add significant complexity and governance attack surface.
+
+#### Recommended migration for renamed identifiers
+
+An owner whose off-chain identifier has changed SHOULD:
+
+1. **Claim** the new identifier — the owner still controls the entity, so any verifier (oracle or ZK) can produce a valid proof for the new name.
+2. **Link** the old identifier as an alias of the new one via `linkIds(newId, [oldId])` — the owner holds both on-chain, so this succeeds.
+
+After linking, both the old and new identifiers resolve to the same address. Protocols and agents that cached the old identifier continue to resolve correctly.
+
+Both verifier types support this flow:
+
+- **Oracle verifiers** sign a proof for the new canonical string after confirming the claimant controls the entity.
+- **ZK verifiers** (zkTLS, TLSNotary) prove the claimant controls the entity at its current canonical URL or API endpoint.
+
+#### Time-bounded claims
+
+Verifier implementations MAY enforce time-bounded claims (e.g. proofs that expire after a period, requiring periodic re-verification). Under this model, a stale claim — including one where the underlying identifier has been renamed or transferred — expires naturally when the owner can no longer produce a valid renewal proof. A challenge or expiry mechanism is deferred to a future ERC. Protocols that cache resolved addresses SHOULD re-validate periodically.
 
 ### Stale aliases after revocation
 
