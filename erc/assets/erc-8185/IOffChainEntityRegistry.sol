@@ -8,7 +8,7 @@ interface IOffChainEntityRegistry {
     event Revoked(bytes32 indexed id, string namespace, string canonicalString, address indexed previousOwner);
     event Linked(bytes32 indexed aliasId, bytes32 indexed primaryId);
     event Unlinked(bytes32 indexed aliasId, bytes32 indexed primaryId);
-    event VerifierUpdated(bytes32 indexed namespaceKey, address verifier);
+    event VerifierUpdated(bytes32 indexed namespaceKey, string namespace, address verifier);
 
     function toId(string calldata namespace, string calldata canonicalString) external pure returns (bytes32);
     function canonicalOf(bytes32 id) external view returns (bytes32);

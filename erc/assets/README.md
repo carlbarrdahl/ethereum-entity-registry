@@ -20,9 +20,10 @@ Deterministic smart accounts (CREATE2) for on-chain identities with arbitrary ex
 | File | Lines | Role |
 |------|-------|------|
 | `IAccountFactory.sol` | ~16 | Factory interface |
-| `IIdentityAccount.sol` | ~17 | Account interface |
-| `AccountFactory.sol` | ~51 | Factory using EIP-1167 clones |
-| `IdentityAccount.sol` | ~40 | Account with `execute` + `receive` |
+| `IIdentityAccount.sol` | ~20 | Account interface (`execute` only) |
+| `IReclaimableIdentityAccount.sol` | ~16 | Optional reclaim extension interface |
+| `AccountFactory.sol` | ~48 | Factory using EIP-1167 clones |
+| `IdentityAccount.sol` | ~76 | Account with owner `execute` + optional reclaim + `receive` |
 
 ## Relationship
 

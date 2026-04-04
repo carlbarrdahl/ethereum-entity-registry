@@ -26,6 +26,7 @@ contract OffChainEntityRegistry is IOffChainEntityRegistry {
     // -- Identifier helpers --------------------------------------------------
 
     function toId(string calldata namespace, string calldata canonicalString) public pure returns (bytes32) {
+        _requireValidNamespace(namespace);
         return keccak256(abi.encode(namespace, canonicalString));
     }
 
@@ -107,8 +108,22 @@ contract OffChainEntityRegistry is IOffChainEntityRegistry {
     // -- Admin ---------------------------------------------------------------
 
     function setVerifier(string calldata namespace, address verifier) external onlyAdmin {
+        _requireValidNamespace(namespace);
         bytes32 key = keccak256(bytes(namespace));
         verifiers[key] = verifier;
-        emit VerifierUpdated(key, verifier);
+        emit VerifierUpdated(key, namespace, verifier);
+    }
+
+    function _requireValidNamespace(string calldata namespace) internal pure {
+        bytes memory ns = bytes(namespace);
+        require(ns.length != 0, "empty namespace");
+
+        for (uint256 i = 0; i < ns.length; i++) {
+            bytes1 c = ns[i];
+            bool isDigit = c >= 0x30 && c <= 0x39;
+            bool isLower = c >= 0x61 && c <= 0x7A;
+            bool isHyphen = c == 0x2D;
+            require(isDigit || isLower || isHyphen, "invalid namespace");
+        }
     }
 }
