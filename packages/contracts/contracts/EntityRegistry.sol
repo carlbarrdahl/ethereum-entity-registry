@@ -22,8 +22,10 @@ import {IdentityAccount} from "./IdentityAccount.sol";
 ///           e.g. keccak256(abi.encode("github", "org/repo"))
 ///                keccak256(abi.encode("dns",    "example.com"))
 ///
-///         Canonicalization rules are namespace-specific and enforced off-chain
-///         by verifiers and frontends, not by this contract.
+///         Namespace labels must match [a-z0-9-]+ and are interpreted as
+///         lowercase ASCII. Canonicalization rules for canonicalString are
+///         namespace-specific and enforced off-chain by verifiers and frontends,
+///         not by this contract.
 contract EntityRegistry is IEntityRegistry, Ownable {
 
     // -------------------------------------------------------------------------
@@ -51,7 +53,7 @@ contract EntityRegistry is IEntityRegistry, Ownable {
     event Linked(bytes32 indexed aliasId, bytes32 indexed primaryId);
     event Unlinked(bytes32 indexed aliasId, bytes32 indexed primaryId);
     event AccountDeployed(bytes32 indexed id, address account);
-    event VerifierUpdated(bytes32 indexed namespaceKey, address verifier);
+    event VerifierUpdated(bytes32 indexed namespaceKey, string namespace, address verifier);
 
     // -------------------------------------------------------------------------
     // Constructor
@@ -70,6 +72,7 @@ contract EntityRegistry is IEntityRegistry, Ownable {
     ///         collisions between different namespace/string pairs that share a common
     ///         concatenation (e.g. "githu" + "borg/repo" vs "github" + "org/repo").
     function toId(string calldata namespace, string calldata canonicalString) public pure returns (bytes32) {
+        _requireValidNamespace(namespace);
         return keccak256(abi.encode(namespace, canonicalString));
     }
 
@@ -224,14 +227,31 @@ contract EntityRegistry is IEntityRegistry, Ownable {
     /// @notice Register or replace the verifier contract for a namespace.
     ///         Existing claims under the previous verifier remain valid.
     function setVerifier(string calldata namespace, address verifier) external onlyOwner {
+        _requireValidNamespace(namespace);
         bytes32 key = keccak256(bytes(namespace));
         verifiers[key] = verifier;
-        emit VerifierUpdated(key, verifier);
+        emit VerifierUpdated(key, namespace, verifier);
     }
 
     /// @notice Upgrade the IdentityAccount implementation for all proxies.
     ///         All existing proxy addresses remain unchanged.
     function upgradeAccountImplementation(address newImpl) external onlyOwner {
         beacon.upgradeTo(newImpl);
+    }
+
+    function _requireValidNamespace(string calldata namespace) internal pure {
+        bytes memory ns = bytes(namespace);
+        require(ns.length != 0, "EntityRegistry: empty namespace");
+
+        for (uint256 i = 0; i < ns.length; i++) {
+            bytes1 c = ns[i];
+            bool isDigit = c >= 0x30 && c <= 0x39;
+            bool isLower = c >= 0x61 && c <= 0x7A;
+            bool isHyphen = c == 0x2D;
+            require(
+                isDigit || isLower || isHyphen,
+                "EntityRegistry: invalid namespace"
+            );
+        }
     }
 }

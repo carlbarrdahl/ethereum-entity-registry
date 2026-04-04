@@ -7,9 +7,10 @@ Solidity smart contracts for the Entity Registry.
 | Contract | Purpose |
 |---|---|
 | **EntityRegistry** | Ownable singleton. Manages identifier ownership, identity account deployment, and verifier registration. Holds no funds. |
-| **IdentityAccount** | Per-identifier smart account deployed as a `BeaconProxy` via CREATE2. Accepts ETH and ERC-20 deposits. The registered owner calls `execute` to interact with any contract. |
+| **IdentityAccount** | Per-identifier smart account deployed as a `BeaconProxy` via CREATE2. Accepts ETH and ERC-20 deposits. The registered owner calls `execute` to interact with any contract. This implementation also includes an optional reclaim extension via `setReclaim`. |
+| **AccountFactory** | Platform-specific factory with reclaim config. Deploys `IdentityAccount` proxies per identifier at deterministic addresses and configures reclaim on deploy. Factory selection is a deployment concern, not a protocol-wide default. |
 | **IEntityRegistry** | Minimal interface consumed by `IdentityAccount` to resolve the registered owner. |
-| **IVerifier** | Verifier interface — one `verify(id, claimant, proof)` function. Implement to add a new namespace. |
+| **IVerifier** | Verifier interface — one `verify(id, claimant, proof)` function. Implement to add a new namespace. Namespace labels are lowercase ASCII matching `[a-z0-9-]+`. |
 | **VerifierOracle** | Abstract base: EIP-712 typed-data proof verification against a trusted signer. |
 | **VerifierGitHub** | Extends `VerifierOracle`. Oracle confirms GitHub repo admin access via OAuth. |
 | **VerifierDns** | Extends `VerifierOracle`. Oracle confirms domain ownership via DNS TXT record. |
@@ -20,7 +21,8 @@ Solidity smart contracts for the Entity Registry.
 ```
 contracts/
   EntityRegistry.sol     — registry singleton
-  IdentityAccount.sol       — per-identifier smart account
+  IdentityAccount.sol       — per-identifier smart account (execute + optional setReclaim)
+  AccountFactory.sol        — platform-specific factory with reclaim config
   IEntityRegistry.sol    — interface for IdentityAccount
   IVerifier.sol             — verifier interface
   verifiers/
