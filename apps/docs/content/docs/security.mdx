@@ -16,8 +16,8 @@ The registry contract has no privileged operators beyond the admin key, whose on
 | **Registry owner** | Trusted admin        | Can update verifiers, upgrade account impl via beacon                             |
 | **Oracle signer**  | Trusted for proofs   | Signs claim proofs after off-chain verification; cannot affect existing ownership |
 | **Claimants**      | Must prove ownership | Can claim only with a valid, unexpired oracle proof                               |
-| **Funders**        | Trustless            | Send tokens to deposit addresses; receive nothing back                            |
-| **Owner**          | Authenticated        | Only the registered owner can call `execute` on their identity account            |
+| **Funders**        | Trustless            | Send tokens to deposit addresses; some deployments may additionally configure reclaim via `AccountFactory` |
+| **Owner**          | Authenticated        | Controls the base `execute` path on their identity account                        |
 
 ### Oracle Verifiers (Current)
 
@@ -52,7 +52,7 @@ EIP-712 domain separation binds proofs to a specific chain and registry deployme
 
 ### Normalisation
 
-Rules are namespace-specific and enforced by verifiers, not globally by the registry. Frontends and verifiers share responsibility for consistent canonicalisation. Future namespaces may be case-sensitive.
+Namespace labels are lowercase ASCII matching `[a-z0-9-]+`. Rules for `canonicalString` remain namespace-specific and are enforced by verifiers, not globally by the registry. Frontends and verifiers share responsibility for consistent canonicalisation.
 
 ### Oracle Key Compromise
 
@@ -65,6 +65,14 @@ The beacon is owned by the registry. Upgrading the account implementation simult
 ### Counterfactual Address Griefing
 
 Deposit addresses are public and computable by anyone. An adversary could pre-deploy account proxies for identifiers at a gas cost, without any effect on correctness — the deposit address and accumulated funds are unaffected. This is a nuisance, not a security issue.
+
+### Reclaim Extension Configuration
+
+The reclaim path is an implementation extension, not part of the minimal owner-only account model. In this repository's implementation, `setReclaim` is first-caller-wins when `reclaimTo` is unset. An adversary who monitors the mempool could front-run a platform's `setReclaim` call. Platforms SHOULD configure reclaim atomically with deployment, for example through an `AccountFactory` or wrapper contract.
+
+### Reclaim After Claim-and-Revoke
+
+If an identity is claimed and then revoked, a previously configured reclaim address regains temporary `execute` rights (assuming the deadline has passed and the identity is unclaimed). This is by design — if the owner chose not to withdraw before revoking, the funder should be able to recover.
 
 ### No Ownership Transfer
 
@@ -92,7 +100,7 @@ See the [FAQ](/docs/faq) for worked examples.
 
 ## Non-Custodial Properties
 
-`IdentityAccount` restricts `execute` to the registered owner via `registry.ownerOf(id) == msg.sender`. No other address can move funds or interact through the account. The registry owner can change verifiers or upgrade the account implementation, but the ownership check ensures only the legitimate owner can act.
+In the base model, `IdentityAccount` restricts `execute` to the registered owner via `registry.ownerOf(id) == msg.sender`. This repository's implementation also supports an optional reclaim path while the identity is unclaimed. The registry owner can change verifiers or upgrade the account implementation, but cannot bypass those authorization checks directly.
 
 ---
 

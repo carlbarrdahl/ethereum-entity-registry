@@ -38,7 +38,8 @@ description: System design, capital flows, security model, and technical decisio
 | Contract              | Purpose                                                             | Pattern                    |
 | --------------------- | ------------------------------------------------------------------- | -------------------------- |
 | **EntityRegistry** | Manages identifier ownership, account deployment, verifier registry | Ownable singleton          |
-| **IdentityAccount**   | Per-identifier smart account; owner can `execute` arbitrary calls   | BeaconProxy per identifier |
+| **IdentityAccount**   | Per-identifier smart account; owner can `execute` arbitrary calls. This implementation also supports optional reclaim via `setReclaim` while unclaimed | BeaconProxy per identifier |
+| **AccountFactory**    | Platform-specific factory with reclaim config; deploys accounts with reclaim pre-configured | Per-platform singleton |
 | **UpgradeableBeacon** | Points all account proxies to the current implementation            | OZ beacon                  |
 | **OracleVerifier**    | Base EIP-712 verifier using a trusted backend signer                | Abstract base              |
 | **DnsVerifier**       | Verifies DNS TXT record ownership via oracle                        | Extends OracleVerifier     |
@@ -72,9 +73,23 @@ Funder ──(ERC-20 transfer)──▶ 0x4a3b... (IdentityAccount proxy)
 1. Funder sends ERC-20 tokens to the deterministic deposit address
 2. Tokens accumulate in the `IdentityAccount` proxy
 3. After the owner claims the identifier with a valid proof, they can call `execute` to interact with any contract
-4. The `execute` function checks `registry.ownerOf(id) == msg.sender` — only the registered owner can act
+4. The base `execute` path checks `registry.ownerOf(id) == msg.sender` — only the registered owner can act
 
 The deposit address is stable and computable before the account proxy is deployed. Funders do not need to wait for the owner to claim.
+
+### Reclaim Path (Optional)
+
+```
+Platform deploys AccountFactory(registry, impl, reclaimTo, duration)
+             │
+  factory.deployAccount(id) ──▶ deploys IdentityAccount + calls setReclaim
+             │
+   ◄── deadline passes, identity still unclaimed ──►
+             │
+  reclaimTo calls execute(...) ──▶ same integrations as owner (transfer, warehouse, etc.)
+```
+
+Platforms that fund accounts on behalf of entities can deploy an `AccountFactory` with a reclaim address and duration. This is an implementation extension, not part of the minimal owner-only account model. If the identity is claimed before the deadline, the owner controls all funds — the reclaim `execute` path is blocked.
 
 ---
 
@@ -88,11 +103,11 @@ The deposit address is stable and computable before the account proxy is deploye
 | **Oracle signer**  | Trusted for proofs   | Signs claim proofs after off-chain verification; cannot affect existing ownership |
 | **Claimants**      | Must prove ownership | Can claim only with a valid, unexpired oracle proof                               |
 | **Funders**        | Trustless            | Send tokens to deposit addresses; receive nothing back                            |
-| **Owner**          | Authenticated        | Only the registered owner can call `execute` on their identity account            |
+| **Owner**          | Authenticated        | Controls the base `execute` path on their identity account                        |
 
 ### Non-Custodial Properties
 
-`IdentityAccount` restricts `execute` to the registered owner — `registry.ownerOf(id) == msg.sender`. No other address can move funds or interact through the account. The registry owner can change verifiers or upgrade the account implementation, but the `ownerOf` check ensures only the legitimate owner can execute calls.
+In the base model, `IdentityAccount` restricts `execute` to the registered owner — `registry.ownerOf(id) == msg.sender`. This repository's implementation also supports an optional reclaim path while the identity is unclaimed. The registry owner can change verifiers or upgrade the account implementation, but cannot bypass the ownership or reclaim checks baked into the account logic.
 
 ### Verifier Security
 
@@ -127,11 +142,11 @@ The beacon pattern allows the registry owner to fix bugs in the account implemen
 
 Using the identifier as the CREATE2 salt means the deposit address is:
 
-- Derivable from the identifier alone (no on-chain lookup)
+- Derivable from the identifier and deployment address (no on-chain lookup)
 - Stable across re-deployments (same identifier → same address)
 - Unique per identifier (no collisions)
 
-Anyone can compute the address with `keccak256(abi.encode(namespace, canonicalString))` and the BeaconProxy initcode — the SDK handles this internally.
+Anyone can compute the address with `keccak256(abi.encode(namespace, canonicalString))`, the deployment address, and the BeaconProxy initcode — the SDK handles this internally. Different factories yield different valid addresses for the same identifier, so ecosystems that want one canonical address must coordinate on a canonical deployment.
 
 ### BeaconProxy for Identity Accounts
 
@@ -160,3 +175,5 @@ A single `mapping(bytes32 => address) public verifiers` (keyed by `keccak256(byt
 - Independent verification logic per namespace
 - Upgrades to one namespace without affecting others (e.g., migrate DNS to on-chain DNSSEC)
 - Adding new namespaces (npm packages, Twitter handles, etc.) without changing the registry
+
+Namespace labels are constrained to lowercase ASCII matching `[a-z0-9-]+`, avoiding ambiguity such as `github` vs `GitHub`.

@@ -22,11 +22,13 @@ Structured requirements using [EARS notation](https://alistairmavin.com/ears/) (
 
 **CR-ID-02** The registry shall use `abi.encode` (not `abi.encodePacked`) to prevent identifier collisions between namespace/string pairs that share a common packed concatenation.
 
+**CR-ID-03** The registry shall accept only namespace labels matching `[a-z0-9-]+`, interpreted as lowercase ASCII.
+
 ---
 
 ## 2. Deterministic Deposit Addresses
 
-**CR-ADDR-01** The registry shall assign every identifier a deterministic Ethereum address, derivable by anyone without making an on-chain call.
+**CR-ADDR-01** The system shall assign every identifier a deterministic Ethereum address under a given registry or factory deployment, derivable by anyone without making an on-chain call.
 
 **CR-ADDR-02** The registry shall compute deposit addresses via CREATE2 using the identifier as the salt and the BeaconProxy initcode as the creation code.
 
@@ -62,11 +64,45 @@ Structured requirements using [EARS notation](https://alistairmavin.com/ears/) (
 
 **CR-EXEC-01** When `execute(target, data, value)` is called on an `IdentityAccount`, the account shall forward the call to `target` with the given `data` and `value`.
 
-**CR-EXEC-02** If `msg.sender` is not the registered owner of the account's identifier (`registry.ownerOf(id)`), then `execute` shall revert.
+**CR-EXEC-02** If `msg.sender` is the registered owner of the account's identifier (`registry.ownerOf(id)`), then `execute` shall forward the call.
 
-**CR-EXEC-03** If the forwarded call to `target` reverts, then `execute` shall revert.
+**CR-EXEC-03** If `msg.sender` is not the registered owner and no supported optional extension authorizes the caller, then `execute` shall revert.
 
-**CR-EXEC-04** The identity account shall accept native ETH deposits via `receive()`.
+**CR-EXEC-04** If the forwarded call to `target` reverts, then `execute` shall revert.
+
+**CR-EXEC-05** The identity account shall accept native ETH deposits via `receive()`.
+
+---
+
+## 5a. Optional Reclaim Extension
+
+**CR-RECL-01** If an identity account supports reclaim, it shall expose `setReclaim(reclaimTo_, reclaimableAfter_)`, `reclaimTo()`, and `reclaimableAfter()`.
+
+**CR-RECL-02** When `setReclaim(reclaimTo_, reclaimableAfter_)` is called on a reclaim-enabled account whose `reclaimTo` is `address(0)`, the account shall accept the call from any sender and store the reclaim parameters.
+
+**CR-RECL-03** While `reclaimTo` is set, only the current `reclaimTo` address may call `setReclaim` to update the reclaim parameters.
+
+**CR-RECL-04** If `setReclaim` is called when the identifier is claimed (`ownerOf(id) != address(0)`), then the account shall revert.
+
+**CR-RECL-05** When `execute` is called by the `reclaimTo` address, after `reclaimableAfter` has passed, and the identifier is unclaimed, the account shall forward the call as for the registered owner.
+
+**CR-RECL-06** If `execute` is called before `reclaimableAfter` by `reclaimTo`, or when `reclaimTo` is unset, or when the identifier is claimed and the caller is not the owner, then the account shall revert.
+
+**CR-RECL-07** The reclaim path shall apply whenever the identifier is unclaimed, including both before first claim and after revocation.
+
+---
+
+## 5b. Account Factory
+
+**CR-FACT-01** An `AccountFactory` shall deploy `IdentityAccount` proxies at deterministic CREATE2 addresses using the identifier as the salt.
+
+**CR-FACT-02** If a factory supports reclaim configuration, then when `deployAccount(id)` is called and `reclaimTo` is configured on the factory, the factory shall call `setReclaim` on the newly deployed account if the identifier is unclaimed.
+
+**CR-FACT-03** If the identifier is already claimed at deploy time, a reclaim-configuring factory shall skip the `setReclaim` call and proceed normally.
+
+**CR-FACT-04** If a factory supports reclaim configuration, it should configure reclaim atomically with deployment.
+
+**CR-FACT-05** The factory may provide `deployAccounts(ids[])` for batch deployment.
 
 ---
 
@@ -97,6 +133,8 @@ Structured requirements using [EARS notation](https://alistairmavin.com/ears/) (
 **CR-VER-01** The registry shall delegate ownership verification to a verifier contract registered for the relevant namespace.
 
 **CR-VER-02** The registry owner shall be able to register, replace, or remove a verifier for any namespace via `setVerifier`.
+
+**CR-VER-02a** When `VerifierUpdated` is emitted, it shall include both the `namespaceKey` and the raw `namespace` string.
 
 **CR-VER-03** An oracle verifier shall reject a proof where `block.timestamp >= expiry`.
 

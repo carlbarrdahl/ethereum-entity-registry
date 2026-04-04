@@ -34,22 +34,26 @@ const id = toId('github', canonicalise('Org/Repo')); // lowercased to "org/repo"
 
 A **namespace** scopes identifiers to a class of off-chain identity. Each namespace has its own canonicalisation rules and a registered verifier contract.
 
+Namespace labels are exact byte strings and must match `[a-z0-9-]+` (lowercase ASCII). For example, `github` is valid, while `GitHub` is a different string and non-compliant.
+
 | Namespace | Canonical string                  | Example       |
 | --------- | --------------------------------- | ------------- |
 | `github`  | `owner/repo` (lowercase)          | `org/repo`    |
 | `dns`     | apex domain (lowercase, no `www`) | `example.com` |
 
-The contract does not enforce canonicalisation — it hashes whatever strings are passed. Consistency between funders and claimants is the caller's responsibility. The SDK's `canonicalise()` function applies the baseline rule (lowercase + trim).
+The contract does not enforce `canonicalString` canonicalisation — it hashes whatever strings are passed. Consistency between funders and claimants is the caller's responsibility. The SDK's `canonicalise()` function applies the baseline rule (lowercase + trim).
 
 ## Deposit Addresses
 
-Every identifier has a **deterministic deposit address** — an `IdentityAccount` proxy derived via CREATE2. The address is:
+Within a given registry or factory deployment, every identifier has a **deterministic deposit address** — an `IdentityAccount` proxy derived via CREATE2. The address is:
 
-- **Stable**: computed from the identifier alone, independent of whether the account is deployed
+- **Stable**: computed from the identifier and deployment address, independent of whether the account is deployed
 - **Computable offline**: derivable from the identifier and registry address without an RPC call
 - **Upgrade-safe**: address does not change when the account implementation is upgraded via the beacon
 
 Funders send ERC-20 tokens directly to this address. Funds accumulate whether or not the identifier has been claimed.
+
+If multiple factories are used, the same identifier can have different valid account addresses under different deployments. Ecosystems that want one canonical deposit address per identifier must coordinate on a canonical deployment.
 
 The SDK handles address derivation internally:
 
@@ -112,7 +116,7 @@ An **IdentityAccount** is a per-identifier `BeaconProxy` deployed via CREATE2. I
 
 - Holds ERC-20 tokens and native ETH deposited by funders
 - Provides an `execute(target, data, value)` function that lets the owner interact with any external contract
-- Routes all actions through the registry's `ownerOf(id)` check — only the registered owner can call `execute`
+- Routes all actions through the registry's `ownerOf(id)` check — in the base model, only the registered owner can call `execute`
 
 The account is deployed lazily — automatically when the owner claims, or by anyone calling `deployAccount(id)`. Funders can send tokens to the deposit address before it's deployed; the address is always the same.
 
@@ -135,6 +139,34 @@ await sdk.account.execute(accountAddress, call.target, call.data);
 ```
 
 The `execute` pattern makes the identity account a general-purpose smart account — any future protocol integration works without upgrading the contract.
+
+### Fund Reclaim (Optional Extension)
+
+Some deployments add a **reclaim address** and **deadline** as an implementation extension. If the identity is never claimed, the platform can recover funds after the deadline passes.
+
+```typescript
+// Platform initialises the SDK with a custom AccountFactory
+const sdk = new EntityRegistrySDK(walletClient, undefined, {
+  accountFactory: '0xPlatformFactory...',
+});
+
+// Deploy accounts using a platform-specific factory
+await sdk.registry.deployAccount(id);
+// or batch:
+await sdk.registry.deployAccounts([id1, id2, id3]);
+
+// After the deadline, if still unclaimed, reclaim via execute (same patterns as owner)
+const to = await sdk.account.reclaimTo(accountAddress);
+const amount = /* token balance at accountAddress, from your RPC */;
+const { target, data } = sdk.account.encodeERC20Transfer(tokenAddress, to, amount);
+await sdk.account.execute(accountAddress, target, data);
+```
+
+The reclaim extension follows these rules:
+
+- Once the identity is **claimed**, the owner controls all funds via `execute`. The reclaim path is blocked.
+- The reclaim path only works while the identity is **unclaimed** and the **deadline has passed** — `reclaimTo` uses `execute` with the same calldata patterns as the owner (e.g. `encodeERC20Transfer`, `encodeWarehouseWithdraw`).
+- If reclaim is used, platforms should configure it atomically with deployment to avoid front-running the initial `setReclaim` call.
 
 ## Aliases
 
@@ -179,7 +211,7 @@ sdk.registry.resolve("example.com");
 | --------------------------- | ------------------------------------------------------------------------------------------------------- |
 | **No prior setup required** | Funders can send tokens before the owner has ever interacted with the protocol                          |
 | **Permissionless**          | Anyone can deploy identity accounts or send tokens                                                      |
-| **Non-custodial**           | Only the registered owner can execute actions through the identity account                              |
+| **Non-custodial**           | In the base model, only the registered owner can execute actions through the identity account           |
 | **Upgradeable**             | Beacon pattern allows fixing bugs without changing any deposit address                                  |
 | **General-purpose**         | `execute` enables any on-chain interaction without contract upgrades                                    |
 | **Pluggable verification**  | Verifiers are swappable per namespace — DNSSEC on-chain verification can replace the oracle model later |
