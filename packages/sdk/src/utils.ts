@@ -9,6 +9,8 @@ import {
   type Address,
 } from "viem";
 
+const NAMESPACE_REGEX = /^[a-z0-9-]+$/;
+
 // ============================================================================
 // Canonicalisation
 // ============================================================================
@@ -23,6 +25,14 @@ export function canonicalise(value: string): string {
   return value.toLowerCase().trim().replace(/\/$/, "");
 }
 
+function assertValidNamespace(namespace: string): void {
+  if (!NAMESPACE_REGEX.test(namespace)) {
+    throw new Error(
+      `Invalid namespace "${namespace}". Namespace labels must match [a-z0-9-]+`,
+    );
+  }
+}
+
 // ============================================================================
 // Identifier helpers
 // ============================================================================
@@ -34,6 +44,7 @@ export function canonicalise(value: string): string {
  * This is a pure local computation — no RPC call required.
  */
 export function toId(namespace: string, canonicalString: string): Hex {
+  assertValidNamespace(namespace);
   return keccak256(
     encodeAbiParameters(parseAbiParameters("string, string"), [
       namespace,
@@ -50,6 +61,7 @@ export function formatIdentifier(
   namespace: string,
   canonicalString: string,
 ): string {
+  assertValidNamespace(namespace);
   return `${namespace}:${canonicalString}`;
 }
 
@@ -67,8 +79,10 @@ export function parseIdentifier(identifier: string): {
       `Invalid identifier (missing namespace): "${identifier}"`,
     );
   }
+  const namespace = identifier.slice(0, colonIndex);
+  assertValidNamespace(namespace);
   return {
-    namespace: identifier.slice(0, colonIndex),
+    namespace,
     canonicalString: identifier.slice(colonIndex + 1),
   };
 }

@@ -32,6 +32,31 @@
           "type": "event"
         },
         {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "id",
+              "type": "bytes32"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "reclaimTo",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "reclaimableAfter",
+              "type": "uint256"
+            }
+          ],
+          "name": "ReclaimSet",
+          "type": "event"
+        },
+        {
           "inputs": [
             {
               "internalType": "address",
@@ -93,6 +118,32 @@
         },
         {
           "inputs": [],
+          "name": "reclaimTo",
+          "outputs": [
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "reclaimableAfter",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
           "name": "registry",
           "outputs": [
             {
@@ -102,6 +153,24 @@
             }
           ],
           "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "reclaimTo_",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "reclaimableAfter_",
+              "type": "uint256"
+            }
+          ],
+          "name": "setReclaim",
+          "outputs": [],
+          "stateMutability": "nonpayable",
           "type": "function"
         },
         {
@@ -1168,7 +1237,7 @@
           "type": "function"
         }
       ],
-      "startBlock": 9
+      "startBlock": 10
     },
     "EntityRegistry": {
       "address": "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
@@ -1357,6 +1426,12 @@
               "internalType": "bytes32",
               "name": "namespaceKey",
               "type": "bytes32"
+            },
+            {
+              "indexed": false,
+              "internalType": "string",
+              "name": "namespace",
+              "type": "string"
             },
             {
               "indexed": false,
@@ -1680,7 +1755,7 @@
           "type": "function"
         }
       ],
-      "startBlock": 10
+      "startBlock": 11
     },
     "DnsVerifier": {
       "address": "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707",
@@ -1908,7 +1983,7 @@
           "type": "function"
         }
       ],
-      "startBlock": 11
+      "startBlock": 12
     },
     "GitHubVerifier": {
       "address": "0x0165878A594ca255338adfa4d48449f69242Eb8F",
@@ -2136,7 +2211,7 @@
           "type": "function"
         }
       ],
-      "startBlock": 12
+      "startBlock": 13
     }
   },
   "84532": {

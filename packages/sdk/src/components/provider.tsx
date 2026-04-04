@@ -7,7 +7,11 @@ import {
   useState,
   type PropsWithChildren,
 } from "react";
-import { EntityRegistrySDK, type SupportedChainId } from "..";
+import {
+  EntityRegistrySDK,
+  type EntityRegistrySDKOptions,
+  type SupportedChainId,
+} from "..";
 import type { WalletClient } from "viem";
 
 type EntityRegistryContextValue<T extends EntityRegistrySDK = EntityRegistrySDK> = {
@@ -21,18 +25,20 @@ const EntityRegistryContext = createContext<EntityRegistryContextValue>({
 type EntityRegistryProviderProps<T extends EntityRegistrySDK> = PropsWithChildren<{
   client?: WalletClient;
   defaultChain?: SupportedChainId;
+  options?: EntityRegistrySDKOptions;
 }>;
 
 export function EntityRegistryProvider<T extends EntityRegistrySDK = EntityRegistrySDK>({
   children,
   client,
   defaultChain,
+  options,
 }: EntityRegistryProviderProps<T>): React.ReactNode {
   const [sdk, setSdk] = useState<EntityRegistrySDK | null>(null);
 
   useEffect(() => {
-    setSdk(new EntityRegistrySDK(client, defaultChain));
-  }, [client, defaultChain]);
+    setSdk(new EntityRegistrySDK(client, defaultChain, options));
+  }, [client, defaultChain, options]);
 
   return (
     <EntityRegistryContext.Provider value={{ sdk }}>

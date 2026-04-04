@@ -1,8 +1,9 @@
 "use client";
-import { PropsWithChildren } from "react";
+import { PropsWithChildren, useMemo } from "react";
 
 import { createConfig, http, useWalletClient, WagmiProvider } from "wagmi";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { Address } from "viem";
 
 import { EntityRegistryProvider } from "@ethereum-entity-registry/sdk";
 import { hardhat, sepolia, baseSepolia } from "viem/chains";
@@ -63,6 +64,33 @@ const config = createConfig({
 
 const queryClient = new QueryClient();
 
+function getAccountFactoryForChain(chainId: number): Address | undefined {
+  const generic = process.env.NEXT_PUBLIC_ACCOUNT_FACTORY_ADDRESS;
+
+  switch (chainId) {
+    case hardhat.id:
+      return (
+        process.env.NEXT_PUBLIC_HARDHAT_ACCOUNT_FACTORY_ADDRESS ??
+        generic ??
+        undefined
+      ) as Address | undefined;
+    case sepolia.id:
+      return (
+        process.env.NEXT_PUBLIC_SEPOLIA_ACCOUNT_FACTORY_ADDRESS ??
+        generic ??
+        undefined
+      ) as Address | undefined;
+    case baseSepolia.id:
+      return (
+        process.env.NEXT_PUBLIC_BASE_SEPOLIA_ACCOUNT_FACTORY_ADDRESS ??
+        generic ??
+        undefined
+      ) as Address | undefined;
+    default:
+      return generic as Address | undefined;
+  }
+}
+
 export function Providers({ children }: PropsWithChildren) {
   return (
     <WagmiProvider config={config}>
@@ -88,9 +116,19 @@ export function Providers({ children }: PropsWithChildren) {
 
 function Registry({ children }: PropsWithChildren) {
   const { data: client } = useWalletClient();
+  const effectiveChainId = client?.chain?.id ?? defaultChain.id;
+  const accountFactory = getAccountFactoryForChain(effectiveChainId);
+  const options = useMemo(
+    () => (accountFactory ? { accountFactory } : undefined),
+    [accountFactory],
+  );
 
   return (
-    <EntityRegistryProvider client={client} defaultChain={defaultChain.id}>
+    <EntityRegistryProvider
+      client={client}
+      defaultChain={defaultChain.id}
+      options={options}
+    >
       {children}
     </EntityRegistryProvider>
   );

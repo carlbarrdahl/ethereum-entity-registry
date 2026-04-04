@@ -24,6 +24,11 @@ export type { IdentifierState } from "./registry";
 
 type ChainDeployments = (typeof deployments)["31337"];
 
+export type EntityRegistrySDKOptions = {
+  /** Address of a platform-specific AccountFactory with reclaim config. */
+  accountFactory?: Address;
+};
+
 function getDeployments(chainId: SupportedChainId): ChainDeployments {
   const d = deployments[chainId.toString() as keyof typeof deployments] as Record<string, unknown>;
   if (!d) throw new Error(`Chain ${chainId} not supported`);
@@ -61,7 +66,11 @@ export class EntityRegistrySDK {
   registry!: ReturnType<typeof createRegistryMethods>;
   account!: ReturnType<typeof createAccountMethods>;
 
-  constructor(wallet?: WalletClient, defaultChain?: SupportedChainId) {
+  constructor(
+    wallet?: WalletClient,
+    defaultChain?: SupportedChainId,
+    options?: EntityRegistrySDKOptions,
+  ) {
     const chainId = (wallet?.chain?.id ??
       defaultChain ??
       31337) as SupportedChainId;
@@ -83,6 +92,7 @@ export class EntityRegistrySDK {
         ...this.#deployments,
         beaconProxyBytecode: deployments.beaconProxyBytecode,
       },
+      options?.accountFactory,
     );
     this.account = createAccountMethods(wallet, this.#public, this.#deployments);
   }

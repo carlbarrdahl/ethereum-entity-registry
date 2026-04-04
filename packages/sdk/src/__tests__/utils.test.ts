@@ -43,6 +43,11 @@ describe("toId", () => {
   it("differs across canonical strings", () => {
     expect(toId("github", "org/repo")).not.toBe(toId("github", "org/other"));
   });
+
+  it("rejects invalid namespace labels", () => {
+    expect(() => toId("GitHub", "org/repo")).toThrow("[a-z0-9-]+");
+    expect(() => toId("github repo", "org/repo")).toThrow("[a-z0-9-]+");
+  });
 });
 
 describe("formatIdentifier", () => {
@@ -52,6 +57,10 @@ describe("formatIdentifier", () => {
 
   it("works for dns namespace", () => {
     expect(formatIdentifier("dns", "example.com")).toBe("dns:example.com");
+  });
+
+  it("rejects invalid namespace labels", () => {
+    expect(() => formatIdentifier("GitHub", "org/repo")).toThrow("[a-z0-9-]+");
   });
 });
 
@@ -86,6 +95,11 @@ describe("parseIdentifier", () => {
 
   it("throws when there is no colon", () => {
     expect(() => parseIdentifier("nocolon")).toThrow();
+  });
+
+  it("rejects invalid namespace labels", () => {
+    expect(() => parseIdentifier("GitHub:org/repo")).toThrow("[a-z0-9-]+");
+    expect(() => parseIdentifier("github repo:org/repo")).toThrow("[a-z0-9-]+");
   });
 });
 

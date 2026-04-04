@@ -21,10 +21,35 @@ type ChainDeployments = {
   beaconProxyBytecode?: string;
 };
 
+const accountFactoryAbi = [
+  {
+    name: "predictAddress",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "id", type: "bytes32" }],
+    outputs: [{ name: "", type: "address" }],
+  },
+  {
+    name: "deployAccount",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "id", type: "bytes32" }],
+    outputs: [{ name: "account", type: "address" }],
+  },
+  {
+    name: "deployAccounts",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "ids", type: "bytes32[]" }],
+    outputs: [],
+  },
+] as const;
+
 export function createRegistryMethods(
   wallet: WalletClient | undefined,
   publicClient: PublicClient,
   deployments: ChainDeployments,
+  accountFactory?: Address,
 ) {
   const registryAddress = deployments.EntityRegistry.address as Address;
   const beaconProxyBytecode = (deployments.beaconProxyBytecode ?? "") as `0x${string}`;
@@ -38,6 +63,14 @@ export function createRegistryMethods(
     });
   }
 
+  function getFactoryReadContract() {
+    return getContract({
+      address: accountFactory!,
+      abi: accountFactoryAbi,
+      client: { public: publicClient },
+    });
+  }
+
   const erc20Abi = [
     {
       name: "balanceOf",
@@ -48,6 +81,18 @@ export function createRegistryMethods(
     },
   ] as const;
 
+  async function predictAddressById(id: `0x${string}`): Promise<Address> {
+    if (accountFactory) {
+      return (getFactoryReadContract() as any).read.predictAddress([id]);
+    }
+    const contract = getContract({
+      address: registryAddress,
+      abi: registryAbi,
+      client: { public: publicClient },
+    });
+    return (contract as any).read.predictAddress([id]);
+  }
+
   async function resolveById(
     namespace: string,
     rawCanonicalString: string,
@@ -56,13 +101,18 @@ export function createRegistryMethods(
     const cs = canonicalise(rawCanonicalString);
     const id = toId(namespace, cs);
 
-    const depositAddress: Address = beaconProxyBytecode
-      ? resolveDepositAddress(id, registryAddress, beaconProxyBytecode)
-      : await (getContract({
-          address: registryAddress,
-          abi: registryAbi,
-          client: { public: publicClient },
-        }) as any).read.predictAddress([id]);
+    let depositAddress: Address;
+    if (accountFactory) {
+      depositAddress = await (getFactoryReadContract() as any).read.predictAddress([id]);
+    } else if (beaconProxyBytecode) {
+      depositAddress = resolveDepositAddress(id, registryAddress, beaconProxyBytecode);
+    } else {
+      depositAddress = await (getContract({
+        address: registryAddress,
+        abi: registryAbi,
+        client: { public: publicClient },
+      }) as any).read.predictAddress([id]);
+    }
 
     const balance = token
       ? isNativeToken(token)
@@ -99,14 +149,11 @@ export function createRegistryMethods(
 
     /**
      * Get the deterministic account address for an identifier.
+     * When an account factory is configured, returns the account address
+     * computed by that factory.
      */
-    predictAddress: async (id: `0x${string}`): Promise<Address> => {
-      const contract = getContract({
-        address: registryAddress,
-        abi: registryAbi,
-        client: { public: publicClient },
-      });
-      return (contract as any).read.predictAddress([id]);
+    predictAddress: (id: `0x${string}`): Promise<Address> => {
+      return predictAddressById(id);
     },
 
     /**
@@ -185,13 +232,46 @@ export function createRegistryMethods(
 
     /**
      * Deploy the IdentityAccount proxy for an identifier (permissionless).
+     * When an account factory is configured, deploys via the factory
+     * (which automatically sets reclaim).
      */
     deployAccount: async (
       id: `0x${string}`,
     ): Promise<{ hash: `0x${string}` }> => {
       if (!wallet) throw new Error("Wallet required");
+      if (accountFactory) {
+        const contract = getContract({
+          address: accountFactory,
+          abi: accountFactoryAbi,
+          client: { public: publicClient, wallet },
+        });
+        const hash = await (contract as any).write.deployAccount([id], {
+          account: wallet.account!,
+        });
+        return writeAndWait(wallet, hash);
+      }
       const contract = getRegistryContract();
       const hash = await (contract as any).write.deployAccount([id], {
+        account: wallet.account!,
+      });
+      return writeAndWait(wallet, hash);
+    },
+
+    /**
+     * Batch deploy accounts for multiple identifiers in a single transaction.
+     * Requires an account factory to be configured.
+     */
+    deployAccounts: async (
+      ids: `0x${string}`[],
+    ): Promise<{ hash: `0x${string}` }> => {
+      if (!wallet) throw new Error("Wallet required");
+      if (!accountFactory) throw new Error("Account factory required for batch deploy");
+      const contract = getContract({
+        address: accountFactory,
+        abi: accountFactoryAbi,
+        client: { public: publicClient, wallet },
+      });
+      const hash = await (contract as any).write.deployAccounts([ids], {
         account: wallet.account!,
       });
       return writeAndWait(wallet, hash);
@@ -222,17 +302,11 @@ export function createRegistryMethods(
 
     /**
      * Check whether the IdentityAccount for an identifier has been deployed.
-     * Returns false if the deposit address has no code (not yet deployed).
-     * The registry deploys it automatically during claim(), but funders can
-     * send tokens before it's deployed — the address is always the same.
+     * When an account factory is configured, checks the account address
+     * computed by that factory.
      */
     isAccountDeployed: async (id: `0x${string}`): Promise<boolean> => {
-      const contract = getContract({
-        address: registryAddress,
-        abi: registryAbi,
-        client: { public: publicClient },
-      });
-      const depositAddress: Address = await (contract as any).read.predictAddress([id]);
+      const depositAddress = await predictAddressById(id);
       const code = await publicClient.getBytecode({ address: depositAddress });
       return code !== undefined && code !== "0x";
     },
