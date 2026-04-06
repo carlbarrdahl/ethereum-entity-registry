@@ -67,7 +67,8 @@ interface IOffChainEntityRegistry {
         bytes32 indexed id,
         string namespace,
         string canonicalString,
-        address indexed owner
+        address indexed owner,
+        address verifier
     );
 
     /// @notice MUST be emitted when an owner voluntarily revokes their claim.
@@ -283,7 +284,7 @@ Off-chain identifiers are not permanent — repositories can be renamed, domains
 
 An owner whose identifier has changed SHOULD claim the new identifier and link the old one as an alias via `linkIds`. Both identifiers then resolve to the same address.
 
-Verifier implementations MAY enforce time-bounded claims requiring periodic re-verification, causing stale claims to expire naturally. A challenge or expiry mechanism is deferred to a future ERC.
+Verifier implementations MAY enforce time-bounded claims requiring periodic re-verification, causing stale claims to expire naturally. A future companion ERC may define a challenge mechanism where any party can initiate re-verification of a stale claim by posting a bond. The current owner would have a grace period (e.g. 30 days) to re-verify through the namespace's current verifier. Failure to re-verify would result in automatic revocation via a `forceRevoke` function callable by authorized challenge contracts — analogous to the pluggable verifier pattern used for claims. The design of such an extension, including bond economics and grace period parameters, is deferred to a separate ERC.
 
 ### Stale aliases after revocation
 
