@@ -105,7 +105,7 @@ interface IReclaimableIdentityAccount {
 If an account implements `IReclaimableIdentityAccount`:
 
 1. `execute` MUST additionally allow when `ownerOf(id) == address(0)`, `reclaimTo() != address(0)`, `msg.sender == reclaimTo()`, and `block.timestamp > reclaimableAfter()`.
-2. `setReclaim` MAY be called by any caller when `reclaimTo()` is unset; thereafter only `reclaimTo()` MAY update it.
+2. `setReclaim` MAY be called by any caller when `reclaimTo()` is unset; thereafter only `reclaimTo()` MAY update it. Implementations MUST ensure initial configuration happens atomically with `deployAccount` (e.g. the factory calls `setReclaim` in the same transaction as deployment) to prevent front-running.
 3. `setReclaim` MUST revert if `ownerOf(id) != address(0)`.
 4. `setReclaim` MUST require `reclaimableAfter_ > block.timestamp`.
 5. The reclaim path applies whenever the identifier is unclaimed, including both before first claim and after revocation.
@@ -162,7 +162,7 @@ This ERC is architecturally independent from [ERC-8185](./erc-8185-off-chain-ent
 
 ## Backwards Compatibility
 
-This ERC is compatible with any ERC-20 token. It does not modify any existing standards.
+This ERC is compatible with any ERC-20 token. It does not modify any existing standards. Account implementations SHOULD implement `onERC721Received` ([ERC-721](./eip-721.md)) and `onERC1155Received` / `onERC1155BatchReceived` ([ERC-1155](./eip-1155.md)) so that safe transfers of NFTs succeed. The reference implementation includes these hooks.
 
 ## Reference Implementation
 
@@ -178,7 +178,7 @@ The implementation has no external dependencies and uses EIP-1167 clones for sim
 
 ### Account upgradeability
 
-The beacon owner can upgrade the account implementation for all proxies simultaneously. This is a critical trust assumption — a malicious upgrade could add functions that bypass ownership checks. The beacon owner key SHOULD be held by a multisig or governance contract with appropriate controls.
+The beacon owner can upgrade the account implementation for all proxies simultaneously. This is a critical trust assumption — a malicious upgrade could add functions that bypass ownership checks. The beacon owner key MUST be held by a multisig or governance contract. Deployments targeting broad adoption SHOULD include a time-locked upgrade delay (e.g. 48 hours) to allow account owners to withdraw funds before an upgrade takes effect.
 
 ### Arbitrary execution and reentrancy
 
@@ -192,11 +192,11 @@ Account addresses are public and computable by anyone. An adversary could pre-de
 
 ### Funds go to current owner
 
-After revocation and re-claim by another entity, funds accumulated before revocation become controllable by the new claimant. This is by design — the account is tied to the identifier, not to any particular owner. Entities SHOULD withdraw funds before revoking their claim.
+After revocation and re-claim by another entity, funds accumulated before revocation become controllable by the new claimant. This is by design — the account is tied to the identifier, not to any particular owner. This includes scenarios where the underlying off-chain entity changes hands (e.g. a GitHub repository is transferred): the new owner who claims the identifier gains control of all accumulated funds. Entities MUST withdraw funds before revoking their claim. Protocols building on this standard SHOULD warn users of this behavior and MAY implement a time-locked revocation period to give the current owner time to withdraw.
 
 ### Reclaim extension configuration
 
-Implementations of `IReclaimableIdentityAccount` introduce a second authority path while the identifier is unclaimed. Platforms SHOULD configure reclaim atomically with deployment (for example, via a thin wrapper contract) to avoid front-running the initial `setReclaim` call.
+Implementations of `IReclaimableIdentityAccount` introduce a second authority path while the identifier is unclaimed. Platforms MUST configure `reclaimTo` atomically with deployment — the factory MUST call `setReclaim` in the same transaction as `deployAccount`. Failing to do so exposes the initial `setReclaim` call to front-running, allowing an attacker to claim reclaim authority over the account. The reference implementation demonstrates this pattern via `deployAccountWithReclaim`.
 
 ### Native ETH edge cases
 

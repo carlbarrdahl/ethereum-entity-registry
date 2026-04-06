@@ -25,6 +25,19 @@ contract AccountFactory is IAccountFactory {
     }
 
     function deployAccount(bytes32 id) public returns (address account) {
+        account = _deploy(id);
+    }
+
+    function deployAccountWithReclaim(
+        bytes32 id,
+        address reclaimTo_,
+        uint256 reclaimableAfter_
+    ) public returns (address account) {
+        account = _deploy(id);
+        IdentityAccount(payable(account)).setReclaim(reclaimTo_, reclaimableAfter_);
+    }
+
+    function _deploy(bytes32 id) private returns (address account) {
         require(predictAddress(id).code.length == 0, "already deployed");
         bytes memory code = _creationCode(id);
         assembly {
