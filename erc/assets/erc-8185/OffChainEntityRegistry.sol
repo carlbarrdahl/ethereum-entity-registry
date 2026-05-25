@@ -39,6 +39,10 @@ contract OffChainEntityRegistry is IOffChainEntityRegistry {
         return owners[canonicalOf(id)];
     }
 
+    function verifierOf(string calldata namespace) external view returns (address) {
+        return verifiers[keccak256(bytes(namespace))];
+    }
+
     // -- Registration --------------------------------------------------------
 
     function claim(
@@ -109,6 +113,7 @@ contract OffChainEntityRegistry is IOffChainEntityRegistry {
 
     function setVerifier(string calldata namespace, address verifier) external onlyAdmin {
         _requireValidNamespace(namespace);
+        require(verifier != address(0), "zero verifier");
         bytes32 key = keccak256(bytes(namespace));
         verifiers[key] = verifier;
         emit VerifierUpdated(key, namespace, verifier);

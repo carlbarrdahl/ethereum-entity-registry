@@ -3,11 +3,11 @@ eip: 8186
 title: Identity Account
 description: Deterministic smart accounts for on-chain identities with arbitrary execution
 author: Carl Barrdahl (@carlbarrdahl)
-discussions-to: https://ethereum-magicians.org/t/erc-8185-off-chain-entity-registry-erc-8186-claimable-escrow/27899
+discussions-to: https://ethereum-magicians.org/t/erc-8186-identity-account/27905
 status: Draft
 type: Standards Track
 category: ERC
-created: 2026-03-04
+created: 2026-03-05
 requires: 8185
 ---
 
@@ -88,6 +88,8 @@ interface IIdentityAccount {
 }
 ```
 
+Accounts MUST resolve ownership by calling `ownerOf(bytes32)` on the ERC-8185 registry bound at deployment.
+
 ### Optional Reclaim Extension
 
 Implementations that support reclaim SHOULD implement:
@@ -105,7 +107,7 @@ interface IReclaimableIdentityAccount {
 If an account implements `IReclaimableIdentityAccount`:
 
 1. `execute` MUST additionally allow when `ownerOf(id) == address(0)`, `reclaimTo() != address(0)`, `msg.sender == reclaimTo()`, and `block.timestamp > reclaimableAfter()`.
-2. `setReclaim` MAY be called by any caller when `reclaimTo()` is unset; thereafter only `reclaimTo()` MAY update it. Implementations MUST ensure initial configuration happens atomically with `deployAccount` (e.g. the factory calls `setReclaim` in the same transaction as deployment) to prevent front-running.
+2. `setReclaim` MAY be called by any caller when `reclaimTo()` is unset; thereafter only `reclaimTo()` MAY update it. Deployments that configure reclaim MUST call `setReclaim` in the same transaction as `deployAccount` to prevent front-running.
 3. `setReclaim` MUST revert if `ownerOf(id) != address(0)`.
 4. `setReclaim` MUST require `reclaimableAfter_ > block.timestamp`.
 5. The reclaim path applies whenever the identifier is unclaimed, including both before first claim and after revocation.
@@ -162,7 +164,7 @@ This ERC is architecturally independent from [ERC-8185](./erc-8185-off-chain-ent
 
 ## Backwards Compatibility
 
-This ERC is compatible with any ERC-20 token. It does not modify any existing standards. Account implementations SHOULD implement `onERC721Received` ([ERC-721](./eip-721.md)) and `onERC1155Received` / `onERC1155BatchReceived` ([ERC-1155](./eip-1155.md)) so that safe transfers of NFTs succeed. The reference implementation includes these hooks.
+This ERC is compatible with any ERC-20 token. It does not modify any existing standards. Account implementations SHOULD implement `onERC721Received` ([ERC-721](./eip-721.md)) and `onERC1155Received` / `onERC1155BatchReceived` ([ERC-1155](./eip-1155.md)) so that safe transfers of NFTs succeed.
 
 ## Reference Implementation
 
@@ -170,15 +172,15 @@ A minimal reference implementation is provided in [assets/erc-8186](../assets/er
 
 - [`AccountFactory.sol`](../assets/erc-8186/AccountFactory.sol) — factory using EIP-1167 minimal proxies
 - [`IReclaimableIdentityAccount.sol`](../assets/erc-8186/IReclaimableIdentityAccount.sol) — optional reclaim extension interface
-- [`IdentityAccount.sol`](../assets/erc-8186/IdentityAccount.sol) — account with `execute` + `IReclaimableIdentityAccount` + `receive`
+- [`IdentityAccount.sol`](../assets/erc-8186/IdentityAccount.sol) — account with `execute` + `IReclaimableIdentityAccount` + `receive` + ERC-721/ERC-1155 receiver hooks
 
-The implementation has no external dependencies and uses EIP-1167 clones for simplicity. The reference implementation includes reclaim through `IReclaimableIdentityAccount` as an explicit extension. A more complete implementation using OpenZeppelin's `UpgradeableBeacon` + `BeaconProxy` is available at [ethereum-entity-registry](https://github.com/carlbarrdahl/ethereum-entity-registry).
+The implementation has no external dependencies and uses EIP-1167 clones for simplicity. EIP-1167 fixes the implementation at factory deployment time; upgradeable deployments MUST use a beacon proxy so account addresses remain stable across implementation upgrades. The reference implementation includes reclaim through `IReclaimableIdentityAccount` as an explicit extension. A more complete implementation using OpenZeppelin's `UpgradeableBeacon` + `BeaconProxy` is available at [ethereum-entity-registry](https://github.com/carlbarrdahl/ethereum-entity-registry).
 
 ## Security Considerations
 
 ### Account upgradeability
 
-The beacon owner can upgrade the account implementation for all proxies simultaneously. This is a critical trust assumption — a malicious upgrade could add functions that bypass ownership checks. The beacon owner key MUST be held by a multisig or governance contract. Deployments targeting broad adoption SHOULD include a time-locked upgrade delay (e.g. 48 hours) to allow account owners to withdraw funds before an upgrade takes effect.
+The beacon owner can upgrade the account implementation for all proxies simultaneously. This is a critical trust assumption — a malicious upgrade could add functions that bypass ownership checks. The beacon owner key SHOULD be held by a multisig or governance contract with appropriate controls.
 
 ### Arbitrary execution and reentrancy
 
@@ -192,11 +194,11 @@ Account addresses are public and computable by anyone. An adversary could pre-de
 
 ### Funds go to current owner
 
-After revocation and re-claim by another entity, funds accumulated before revocation become controllable by the new claimant. This is by design — the account is tied to the identifier, not to any particular owner. This includes scenarios where the underlying off-chain entity changes hands (e.g. a GitHub repository is transferred): the new owner who claims the identifier gains control of all accumulated funds. Entities MUST withdraw funds before revoking their claim. Protocols building on this standard SHOULD warn users of this behavior and MAY implement a time-locked revocation period to give the current owner time to withdraw.
+After revocation and re-claim by another entity, funds accumulated before revocation become controllable by the new claimant. This is by design — the account is tied to the identifier, not to any particular owner. Entities SHOULD withdraw funds before revoking their claim.
 
 ### Reclaim extension configuration
 
-Implementations of `IReclaimableIdentityAccount` introduce a second authority path while the identifier is unclaimed. Platforms MUST configure `reclaimTo` atomically with deployment — the factory MUST call `setReclaim` in the same transaction as `deployAccount`. Failing to do so exposes the initial `setReclaim` call to front-running, allowing an attacker to claim reclaim authority over the account. The reference implementation demonstrates this pattern via `deployAccountWithReclaim`.
+Implementations of `IReclaimableIdentityAccount` introduce a second authority path while the identifier is unclaimed. Deployments that configure reclaim MUST call `setReclaim` in the same transaction as `deployAccount`; otherwise the initial `setReclaim` is front-runnable.
 
 ### Native ETH edge cases
 
