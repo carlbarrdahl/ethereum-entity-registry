@@ -149,4 +149,6 @@ apps/
 
 - [OVERVIEW.md](./OVERVIEW.md) — What this is and why it exists
 - [spec.md](./spec.md) — Full research paper (design trade-offs, open questions)
+- [Open Privy infrastructure review](./erc/open-privy-infrastructure-review.md) — Email-first onboarding, privacy, relayers, reverse lookup, and implementation roadmap
+- [Privacy-preserving email identity](./erc/privacy-preserving-email-identity.md) — Focused proposal for hash-only email claims
 - [Documentation site](./apps/docs/) — Concepts, architecture, integration guide, security model, requirements
